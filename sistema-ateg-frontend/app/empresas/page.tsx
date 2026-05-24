@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
-import { Home, Briefcase, FileText, Users, Bell, Building, UserPlus, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Home, Briefcase, FileText, Users, Bell, Building, UserPlus, Save, Database, ClipboardList } from 'lucide-react';
 
 export default function CadastroEmpresas() {
   const [abaAtiva, setAbaAtiva] = useState('empresa');
@@ -14,25 +14,38 @@ export default function CadastroEmpresas() {
   // Estados do formulário do Técnico
   const [nomeTecnico, setNomeTecnico] = useState('');
   const [tipoProfissional, setTipoProfissional] = useState('');
-  const [idTecnico, setIdTecnico] = useState('');
   const [telefoneTecnico, setTelefoneTecnico] = useState('');
   const [emailTecnico, setEmailTecnico] = useState('');
+  
+  // ✨ NOVOS ESTADOS: Empresa vinculada e Status do RAT
+  const [cnpjVinculado, setCnpjVinculado] = useState('');
+  const [precisaRat, setPrecisaRat] = useState('NAO');
+  const [listaEmpresas, setListaEmpresas] = useState([]);
+
+  // Busca as empresas para o técnico poder ser vinculado a uma delas
+  useEffect(() => {
+    const buscarEmpresas = async () => {
+      try {
+        const res = await fetch('http://localhost:3000/api/empresas');
+        if (res.ok) setListaEmpresas(await res.json());
+      } catch (error) {
+        console.error("Erro ao carregar empresas:", error);
+      }
+    };
+    buscarEmpresas();
+  }, []);
 
   // 📝 FUNÇÃO MÁGICA: Formata o CNPJ automaticamente enquanto digita
   const formatarCNPJ = (valor) => {
-    // Remove tudo o que não for número
     const apenasNumeros = valor.replace(/\D/g, '');
-    
-    // Aplica a máscara progressivamente de acordo com a quantidade de números
     return apenasNumeros
       .replace(/^(\d{2})(\d)/, '$1.$2')
       .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
       .replace(/\.(\d{3})(\d)/, '.$1/$2')
       .replace(/(\d{4})(\d)/, '$1-$2')
-      .substring(0, 18); // Limita ao tamanho máximo do CNPJ formatado
+      .substring(0, 18);
   };
 
-  // Trata a digitação do CNPJ
   const handleCnpjChange = (e) => {
     const valorFormatado = formatarCNPJ(e.target.value);
     setCnpj(valorFormatado);
@@ -56,7 +69,11 @@ export default function CadastroEmpresas() {
       const dados = await response.json();
       if (response.ok) {
         alert("🎉 Empresa gravada com sucesso no Supabase!");
-        setCnpj(''); setRazaoSocial(''); setEmailEmpresa(''); // Limpa o formulário
+        setCnpj(''); setRazaoSocial(''); setEmailEmpresa('');
+        
+        // Atualiza a lista de empresas no formulário do técnico
+        const res = await fetch('http://localhost:3000/api/empresas');
+        if (res.ok) setListaEmpresas(await res.json());
       } else {
         alert("Erro: " + dados.erro);
       }
@@ -68,17 +85,20 @@ export default function CadastroEmpresas() {
   // Função para enviar os dados do Técnico para o Backend
   const handleSalvarTecnico = async (e) => {
     e.preventDefault();
-    if (!nomeTecnico || !tipoProfissional || !idTecnico) {
-      alert("Por favor, preencha os campos obrigatórios (Nome, Tipo e Identificador).");
+    if (!nomeTecnico || !tipoProfissional || !cnpjVinculado) {
+      alert("Por favor, preencha os campos obrigatórios (*): Nome, Tipo e Empresa Vinculada.");
       return;
     }
+
+    // ✨ GERA UM ID TEMPORÁRIO AUTOMÁTICO PARA NÃO QUEBRAR O BANCO
+    const idGerado = `PENDENTE-${Math.floor(Math.random() * 10000)}`;
 
     try {
       const response = await fetch('http://localhost:3000/api/profissionais', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          id_tecnico: idTecnico, 
+          id_tecnico: idGerado, 
           nome: nomeTecnico, 
           tipo: tipoProfissional, 
           email: emailTecnico, 
@@ -88,8 +108,15 @@ export default function CadastroEmpresas() {
 
       const dados = await response.json();
       if (response.ok) {
-        alert("🎉 Profissional gravado com sucesso no Supabase!");
-        setNomeTecnico(''); setTipoProfissional(''); setIdTecnico(''); setTelefoneTecnico(''); setEmailTecnico(''); // Limpa o formulário
+        // ✨ REDIRECIONAMENTO INTELIGENTE SE PRECISAR DE RAT
+        if (precisaRat === 'SIM') {
+          alert("Profissional salvo com sucesso! Redirecionando para agendamento do RAT...");
+          window.location.href = `/rat`; // Manda a pessoa direto pra tela do RAT
+        } else {
+          alert("🎉 Profissional gravado com sucesso no Supabase!");
+          setNomeTecnico(''); setTipoProfissional(''); setTelefoneTecnico(''); 
+          setEmailTecnico(''); setCnpjVinculado(''); setPrecisaRat('NAO');
+        }
       } else {
         alert("Erro: " + dados.erro);
       }
@@ -115,6 +142,12 @@ export default function CadastroEmpresas() {
           </a>
           <a href="/juridico" className="flex items-center gap-3 text-slate-300 hover:bg-slate-800 px-4 py-3 rounded-lg transition-colors">
             <FileText size={20} /> Controle Jurídico
+          </a>
+          <a href="/rat" className="flex items-center gap-3 text-slate-300 hover:bg-slate-800 px-4 py-3 rounded-lg transition-colors">
+            <ClipboardList size={20} /> Formulário RAT
+          </a>
+          <a href="/bd-empresas" className="flex items-center gap-3 text-slate-300 hover:bg-slate-800 px-4 py-3 rounded-lg transition-colors">
+            <Database size={20} /> BD_Empresas
           </a>
         </nav>
       </aside>
@@ -144,7 +177,6 @@ export default function CadastroEmpresas() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">CNPJ *</label>
-                    {/* Campo atualizado usando a função de mudança dinâmica */}
                     <input 
                       type="text" 
                       value={cnpj} 
@@ -178,6 +210,7 @@ export default function CadastroEmpresas() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Nome Completo *</label>
                     <input type="text" value={nomeTecnico} onChange={(e) => setNomeTecnico(e.target.value)} placeholder="Nome do profissional" className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Profissional *</label>
                     <select value={tipoProfissional} onChange={(e) => setTipoProfissional(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white">
@@ -186,15 +219,38 @@ export default function CadastroEmpresas() {
                       <option value="SUPERVISOR">Supervisor</option>
                     </select>
                   </div>
+
+                  {/* ✨ NOVO CAMPO: VINCULAR EMPRESA */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">ID do Técnico (Matrícula/CPF) *</label>
-                    <input type="text" value={idTecnico} onChange={(e) => setIdTecnico(e.target.value)} placeholder="Código identificador" className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Empresa Vinculada *</label>
+                    <select value={cnpjVinculado} onChange={(e) => setCnpjVinculado(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                      <option value="">Selecione a empresa...</option>
+                      {listaEmpresas.map((emp) => (
+                        <option key={emp.cnpj} value={emp.cnpj}>
+                          {emp.razao_social}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Telefone / WhatsApp</label>
                     <input type="text" value={telefoneTecnico} onChange={(e) => setTelefoneTecnico(e.target.value)} placeholder="(00) 00000-0000" className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
+
+                {/* ✨ NOVO CAMPO: STATUS RAT E REDIRECIONAMENTO */}
+                <div className="bg-blue-50 p-5 rounded-lg border border-blue-100 mt-4">
+                  <label className="block text-sm font-bold text-blue-800 mb-2">Situação de Avaliação (RAT)</label>
+                  <select value={precisaRat} onChange={(e) => setPrecisaRat(e.target.value)} className="w-full px-4 py-2 border border-blue-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700">
+                    <option value="NAO">Já realizou o RAT / Dispensado</option>
+                    <option value="SIM">RAT - ENVIAR (Agendar Reunião)</option>
+                  </select>
+                  <p className="text-xs text-blue-600 mt-2">
+                    {precisaRat === 'SIM' ? "⚠️ O sistema irá redirecioná-lo automaticamente para a tela de agendamento após salvar." : "Nenhum agendamento pendente."}
+                  </p>
+                </div>
+
                 <div className="flex justify-end pt-4 border-t">
                   <button type="submit" className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-lg font-medium shadow-sm">
                     <Save size={18} /> Salvar Profissional
